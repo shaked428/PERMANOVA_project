@@ -1,0 +1,196 @@
+---
+title: "Untitled"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+
+```{r }
+# Import the data and general exploration
+data <- read.csv("C:/Users/shake/Desktop/Shaked/Academy/HUJI-CS/2021-2022/52001 - simulation/project/sattelite_launches.csv")
+
+# Creating the relevant feature
+decayed_sat <- data[data$status == "Decayed",]
+decayed_launch <- decayed_sat$launch_date
+days_from_launch <- as.numeric(Sys.Date() - as.Date(decayed_launch, "%d-%B-%y"))
+real_data <- decayed_sat[days_from_launch>0 & days_from_launch<3650,]
+table(real_data$owner)
+real_data$days_in_space <- as.numeric(as.Date(real_data$flight_ended, "%d-%B-%y") - as.Date(real_data$launch_date, "%d-%B-%y"))
+
+# shortened countries names
+
+real_data[real_data$owner == "Commonwealth of Independent States (former USSR)",]$owner <- "Russia"
+real_data[real_data$owner == "People's Republic of China",]$owner <- "China"
+real_data[real_data$owner == "Democratic People's Republic of Korea",]$owner <- "North Korea"
+real_data[real_data$owner == "Republic of Korea",]$owner <- "South Korea"
+real_data[real_data$owner == "European Space Agency",]$owner <- "UN"
+
+
+# Separate "days_in_space" to each country
+us_days_in_space <- real_data[real_data$owner == "United States",]$days_in_space
+russia_days_in_space <- real_data[real_data$owner == "Russia",]$days_in_space
+china_days_in_space <- real_data[real_data$owner == "China",]$days_in_space
+
+
+#prepering data for the bar plot
+df <- data.frame(table(real_data$owner))
+df <- df[!df$Var1 == "",]
+column_order <- df[order(df$Freq, decreasing = TRUE),]$Var1
+
+#bar plot
+ggplot(data=df, aes(x=Var1, y=Freq)) +
+  geom_bar(stat="identity") +
+  scale_x_discrete(limits = column_order) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("number of satellites by country") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("country") +
+  ylab("count")
+
+# Explore the distribution of the feature
+hist(us_days_in_space,breaks=50)
+hist(russia_days_in_space,breaks=50)
+hist(china_days_in_space,breaks=50)
+
+# Explore the distribution of the sqrt
+hist(sqrt(us_days_in_space),breaks=50)
+hist(sqrt(russia_days_in_space),breaks=50)
+hist(sqrt(china_days_in_space),breaks=50)
+
+# Explore the distribution of the log
+hist(log(us_days_in_space),breaks=50)
+hist(log(russia_days_in_space),breaks=50)
+hist(log(china_days_in_space),breaks=50)
+
+# hist(log(us_days_in_space)[log(us_days_in_space) > 4.2])
+
+# Check for normality in the feature
+# TODO: what check we want to do? 
+qqnorm(log(us_days_in_space[us_days_in_space != 0]))
+qqline(log(us_days_in_space[us_days_in_space != 0]))
+qqnorm(log(russia_days_in_space[russia_days_in_space != 0]))
+qqline(log(russia_days_in_space[russia_days_in_space != 0]))
+qqnorm(log(china_days_in_space[china_days_in_space != 0]))
+qqline(log(china_days_in_space[china_days_in_space != 0]))
+
+```
+```{r}
+qqplot(us_days_in_space,china_days_in_space)
+qqplot(us_days_in_space,russia_days_in_space)
+qqplot(china_days_in_space,russia_days_in_space)
+```
+
+```{r}
+F.statistic <- function(...) {
+  allSamplesList <- list(...)
+  a = length(allSamplesList) # number of groups 
+  vecAllSamples <- unlist(allSamplesList, use.names = FALSE)
+  N <- length(vecAllSamples)
+  SST <- sum(dist(vecAllSamples) ^ 2) / N
+  SSW <- 0
+  for (vec in allSamplesList) {
+    SSW <- SSW + (sum(dist(vec) ^ 2) / length(vec))
+  }
+  
+  SSA <- SST - SSW
+  
+  fstat <- SSA * (N - a) / SSW * (a - 1)
+  return(fstat)
+}
+```
+
+
+```{r}
+n1 <- length(us_days_in_space)
+n2 <- length(russia_days_in_space)
+n3 <- length(china_days_in_space)
+
+# Put all the samples in a united pool, according to the H0 hypotheses
+united_samples <- c(us_days_in_space, russia_days_in_space, china_days_in_space)
+B = 1000
+united_samples_mean <- rep(NA, B)
+for(i in seq(B)) {
+  united_indecies <- seq(length(united_samples))
+  group1_indecies <- sample(united_indecies, n1, replace = FALSE)
+  united_indecies <- setdiff(united_indecies, group1_indecies)
+  group2_indecies <- sample(united_indecies, n2, replace = FALSE)
+  group3_indecies <- setdiff(united_indecies, group2_indecies)
+  united_samples_mean[i] <- F.statistic(united_samples[group1_indecies], united_samples[group2_indecies], united_samples[group3_indecies])
+}
+
+original_F <- F.statistic(us_days_in_space, china_days_in_space, russia_days_in_space)
+
+hist(united_samples_mean)
+abline(v=original_F, col="red")
+pval_united <- mean(united_samples_mean > original_F)
+
+
+```
+
+
+
+
+```{r}
+pval_vec <- rep(NA, 3)
+# US - RUSSIA
+
+# Put all the samples in a united pool, according to the H0 hypotheses
+united_samples <- c(us_days_in_space, russia_days_in_space)
+united_samples_mean <- rep(NA, B)
+for(i in seq(B)) {
+  united_indecies <- seq(length(united_samples))
+  group1_indecies <- sample(united_indecies, n1, replace = FALSE)
+  group2_indecies <- setdiff(united_indecies, group1_indecies)
+  united_samples_mean[i] <- mean(united_samples[group1_indecies]) - mean(united_samples[group2_indecies])
+}
+
+original_statistic <- mean(us_days_in_space) - mean(russia_days_in_space)
+
+hist(united_samples_mean)
+abline(v=original_statistic, col="red")
+pval_vec[1] <- mean(united_samples_mean > abs(original_statistic)) + mean(united_samples_mean < (-1 *abs(original_statistic)))
+
+
+# US - CHINA
+
+# Put all the samples in a united pool, according to the H0 hypotheses
+united_samples <- c(us_days_in_space, china_days_in_space)
+united_samples_mean <- rep(NA, B)
+for(i in seq(B)) {
+  united_indecies <- seq(length(united_samples))
+  group1_indecies <- sample(united_indecies, n1, replace = FALSE)
+  group2_indecies <- setdiff(united_indecies, group1_indecies)
+  united_samples_mean[i] <- mean(united_samples[group1_indecies]) - mean(united_samples[group2_indecies])
+}
+
+original_statistic <- mean(us_days_in_space) - mean(china_days_in_space)
+
+hist(united_samples_mean)
+abline(v=original_statistic, col="red")
+pval_vec[2] <- mean(united_samples_mean > abs(original_statistic)) + mean(united_samples_mean < (-1 *abs(original_statistic)))
+
+
+# CHINA - RUSSIA
+
+# Put all the samples in a united pool, according to the H0 hypotheses
+united_samples <- c(china_days_in_space, russia_days_in_space)
+united_samples_mean <- rep(NA, B)
+for(i in seq(B)) {
+  united_indecies <- seq(length(united_samples))
+  group1_indecies <- sample(united_indecies, n3, replace = FALSE)
+  group2_indecies <- setdiff(united_indecies, group1_indecies)
+  united_samples_mean[i] <- mean(united_samples[group1_indecies]) - mean(united_samples[group2_indecies])
+}
+
+original_statistic <- mean(china_days_in_space) - mean(russia_days_in_space)
+
+hist(united_samples_mean)
+abline(v=original_statistic, col="red")
+pval_vec[3] <- mean(united_samples_mean > abs(original_statistic)) + mean(united_samples_mean < (-1 *abs(original_statistic)))
+
+
+```
